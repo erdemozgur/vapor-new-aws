@@ -50,8 +50,7 @@ struct WebsiteController: RouteCollection {
     authSessionRoutes.post(RegisterData.self, at: "register", use: registerPostHandler)
     authSessionRoutes.get("forgottenPassword", use: forgottenPasswordHandler)
     authSessionRoutes.post("forgottenPassword", use: forgottenPasswordPostHandler)
-    authSessionRoutes.get("resetPassword", use: resetPasswordHandler)
-    authSessionRoutes.post(ResetPasswordData.self, at: "resetPassword", use: resetPasswordPostHandler)
+    
     authSessionRoutes.get("users", User.parameter, "profilePicture", use: getUsersProfilePictureHandler)
 
     let protectedRoutes = authSessionRoutes.grouped(RedirectMiddleware<User>(path: "/login"))
@@ -285,35 +284,6 @@ struct WebsiteController: RouteCollection {
     }
   }
 
-  func resetPasswordHandler(_ req: Request) throws -> Future<View> {
-    guard let token = req.query[String.self, at: "token"] else {
-      return try req.view().render("resetPassword", ResetPasswordContext(error: true))
-    }
-    return ResetPasswordToken.query(on: req).filter(\.token == token).first().map(to: ResetPasswordToken.self) { token in
-      guard let token = token else {
-        throw Abort.redirect(to: "/")
-      }
-      return token
-    }.flatMap { token in
-      return token.user.get(on: req).flatMap { user in
-        try req.session().set("ResetPasswordUser", to: user)
-        return token.delete(on: req)
-      }
-    }.flatMap {
-      try req.view().render("resetPassword", ResetPasswordContext())
-    }
-  }
-
-  func resetPasswordPostHandler(_ req: Request, data: ResetPasswordData) throws -> Future<Response> {
-    guard data.password == data.confirmPassword else {
-      return try req.view().render("resetPassword", ResetPasswordContext(error: true)).encode(for: req)
-    }
-    let resetPasswordUser = try req.session().get("ResetPasswordUser", as: User.self)
-    try req.session()["ResetPasswordUser"] = nil
-    let newPassword = try BCrypt.hash(data.password)
-    resetPasswordUser.password = newPassword
-    return resetPasswordUser.save(on: req).transform(to: req.redirect(to: "/login"))
-  }
 
   func addProfilePictureHandler(_ req: Request) throws -> Future<View> {
     return try req.parameters.next(User.self).flatMap { user in
